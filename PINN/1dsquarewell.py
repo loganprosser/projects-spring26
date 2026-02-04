@@ -23,6 +23,7 @@ as a loss function
 #for mac use mps for nvidia use cuda         
 print(f"PyTorch version: {torch.__version__}")
 device = "mps" if torch.backends.mps.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else device
 print(f"Using device: {device}")
 
 # Define a simple feedforward neural network or machinen learning perceptron (MLP)
@@ -156,7 +157,7 @@ def loss_fn(Nf=256, Nn=256, lam_bc=1.0, lam_norm=1.0): #nf is number of randomly
     
 #==== Constants ======
 L = 1.0  # Length of the well
-n = 1    # Quantum number
+n = 3    # Quantum number
 LAM_BC = 1.0  # Weight for boundary condition loss
 NUM_F = 512  # Number of collocation points for PDE loss
 NUM_N = 512  # Number of points for normalization loss
@@ -237,7 +238,7 @@ if PLOT:
     fig, axes = plt.subplots(2, 1, figsize=(7, 6), sharex=True)
 
     # --- Wavefunction ---
-    axes[0].plot(x_plot_np, psi_np)
+    axes[0].plot(x_plot_np, psi_np, color="blue")
     axes[0].axhline(0, linewidth=2, color="green", ls="--")
     axes[0].axvline(0, linewidth=2, color="green", ls="--")
     axes[0].axvline(L, linewidth=2, color="green", ls="--")
@@ -245,7 +246,8 @@ if PLOT:
     axes[0].set_title("Learned wavefunction")
 
     # --- Probability density ---
-    axes[1].plot(x_plot_np, prob_np)
+    axes[1].plot(x_plot_np, prob_np, color="magenta")
+    axes[1].axhline(0, linewidth=2, color="green", ls="--")
     axes[1].axvline(0, linewidth=2, color="green", ls="--")
     axes[1].axvline(L, linewidth=2, color="green", ls="--")
     axes[1].set_xlabel("x")
