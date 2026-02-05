@@ -95,7 +95,7 @@ for p in model.parameters():
         
 '''
 
-def psi_with_BC(x):
+def psi_force_BC(x):
     """
     Enforce boundary conditions by construction
     psi(0) = 0 and psi(L) = 0
@@ -104,34 +104,58 @@ def psi_with_BC(x):
     """
     return x * (L-x) * model(x) 
 
+L = 1.0  
+X_NORM = torch.linspace(0.0, L, 4096, device=device).view(-1, 1)
+
+def psi_force_normalize(x, eps=1e-12):
+    # force normalization of wavefunction at points x using batch estimate
+    #Returns:
+    #   psi_norm(x), norm_raw  (norm_raw is the integral of psi_bc^2 over [0,L])
+    
+    psi_grid = psi_force_BC(X_NORM)
+    psi2 = (psi_grid.view(-1)**2)
+    x1d = X_NORM.view(-1)
+    norm_raw = torch.trapz(psi2, x1d)  # approximate integral over [0,L] using trap
+    
+    psi_norm=psi_force_BC(x) / torch.sqrt(norm_raw + eps)
+    return psi_norm, norm_raw
+    
+def norm_check(eps=1e-12):
+    with torch.no_grad():
+        psi_norm_grid, _ = psi_force_normalize(X_NORM, eps=eps)
+        psi2 = (psi_norm_grid.view(-1)**2)
+        x1d = X_NORM.view(-1)
+        return torch.trapz(psi2, x1d)  # approximate integral over [0,L] using trap
 
 # returns schrodingers residual at points x assuming boundary conditions are enforced by construction
 def Res_TISE_with_BC(x):
     # RMS loss of time-independent schrodingers equation with boundary conditions enforced by construction
     x.requires_grad_(True)
-    psi = psi_with_BC(x)
+    psi, norm_est = psi_force_normalize(x)
     psi_x = d_dx(psi, x)
     psi_xx = d_dx(psi_x, x)
     # Schrödinger residual: -psi'' - E*psi = 0
     # use this in loss funcciotn should alwasy be close to zero for physicaly valid solution 
     #return -psi_xx - E_param * psi
-    return -psi_xx - E_const * psi
+    return -psi_xx - E_const * psi, norm_est
 
 # online says to enforce boundary conditons before loss function not sure why...
 # can enforce boundary contisoin by constructoin instead of adding to loss: (not used right now)
 
 def with_bc_loss():
+    #not used anymore
     # gives RMS loss of boundary conditions being incorrect
     x0 = torch.zeros(1, 1, device=device)
     xL = torch.full((1, 1), L, device=device)
-    psi0 = psi_with_BC(x0)
-    psiL = psi_with_BC(xL)
+    psi0 = psi_force_BC(x0)
+    psiL = psi_force_BC(xL)
     return (psi0**2).mean() + (psiL**2).mean()
 
 def norm_loss(Nn=256):
+    #not used anymore
     # normilizatoin condition RMS loss
     x_n = torch.rand(Nn, 1, device=device) * L
-    psi_n = psi_with_BC(x_n)
+    psi_n = psi_force_BC(x_n)
     norm_est = L * torch.mean(psi_n**2)
     return (norm_est - 1.0)**2, norm_est
 
@@ -139,56 +163,62 @@ def norm_loss(Nn=256):
 def loss_fn(Nf=256, Nn=256, lam_bc=1.0, lam_norm=1.0): #nf is number of randomly selected ponits were we want schrodingers to be valid randomly selected in the well
     # pick batch of interior points (0, L) to investigate
     x_f = torch.rand(Nf, 1, device=device) * L
-    r = Res_TISE_with_BC(x_f)
+    r, _ = Res_TISE_with_BC(x_f)
     loss_pde = torch.mean(r**2)
 
     #with Explicit BC Loss
-    loss_bc = with_bc_loss()
+    #loss_bc = with_bc_loss()
     
     #normilizatoin loss
-    loss_norm, norm_est = norm_loss(Nn)
+    #loss_norm, norm_est = norm_loss(Nn)
     
     # total loss
-    total_loss = loss_pde + lam_bc * loss_bc + lam_norm * loss_norm
+    #total_loss = loss_pde + lam_bc * loss_bc + lam_norm * loss_norm
+    total_loss = loss_pde  #+ lam_norm * loss_norm
 
-    return total_loss, loss_pde.detach(), loss_bc.detach(), loss_norm.detach(), norm_est.detach()
+    return total_loss, loss_pde.detach(), _.detach()
 
     #detach() doesnt save gradients for these losses we just want to monitor them not use them for backprop or anything that we need to store them with
     
 # ==== Constants ======
 L = 1.0  # Length of the well
-n = 2    # Quantum number can do 1
+n = 30    # Quantum number can do 1
 LAM_BC = 1.0  # Weight for boundary condition loss
 NUM_F = 1600  # Number of collocation points for PDE loss
 NUM_N = 1600  # Number of points for normalization loss
 LAM_NORM = 1.5  # Weight for normalization loss
 LEARNING_RATE = 1e-3
-TRAINING_STEPS = 16000
+TRAINING_STEPS = 22000
 PLOT = True
 TRAIN = True
-LAYERS = 3
-WIDTH = 128
+#LAYERS = 3
+#WIDTH = 128
+LAYERS = 6
+WIDTH = 512
 # =====================
 
 model = MLP(width=WIDTH, depth=LAYERS).to(device) #assigns what device to use for it uses random initial weights i think
 E_const = ((n * math.pi) / L)**2 #analytical energy levels for infinite square well
-optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE) #Adam!!
+A = torch.nn.Parameter(torch.tensor(10.0, device=device)) # learnable paramater that starts large to stop convergence towards trivial solution
+optimizer = optim.Adam(list(model.parameters()) + [A], lr=LEARNING_RATE) #Adam!!
 
 def train(optimizer=optimizer, training_steps=TRAINING_STEPS, Nf=NUM_F, Nn=NUM_N, lam_bc=LAM_BC, lam_norm=LAM_NORM, loss_fn=loss_fn):
     for step in range(1, training_steps + 1):
         optimizer.zero_grad()
-        loss, loss_pde, loss_bc, loss_norm, norm_est = loss_fn(Nf=512, Nn=256, lam_bc=lam_bc, lam_norm=lam_norm)
+        loss, loss_pde, _ = loss_fn(Nf=512, Nn=256)
         loss.backward()
         optimizer.step()
 
         if step % 200 == 0:
+            nc = norm_check()
             print(
                 f"Step {step:4d}  "
                 f"Loss={loss.item():.3e}  "
                 f"PDELoss={loss_pde.item():.3e}  "
-                f"BCLoss={loss_bc.item():.3e}  "
-                f"NormLoss={loss_norm.item():.3e}  "
-                f"Norm={norm_est.item():.3e}  "
+                #f"BCLoss={loss_bc.item():.3e}  "
+                #f"NormLoss={loss_norm.item():.3e}  "
+                #f"Norm={norm_est.item():.3e}  "
+                f"NormCheck={nc.item():.6f}  "
                 #f"E={E_param.item():.6f}"
             )
             
@@ -199,39 +229,43 @@ def test_psi(num=2000):
     x = torch.rand(num, 1, device=device) * L
 
     # PDE residual
-    r = Res_TISE_with_BC(x)
+    r, _ = Res_TISE_with_BC(x)
+    norm_est = norm_check()
     r_rms = torch.sqrt(torch.mean(r**2)).item()
 
     with torch.no_grad():
         # Boundary values
         x0 = torch.zeros(1,1, device=device)
         xL = torch.full((1,1), L, device=device)
-        psi0 = psi_with_BC(x0).abs().item()
-        psiL = psi_with_BC(xL).abs().item()
+        psi0 = psi_force_BC(x0).abs().item()
+        psiL = psi_force_BC(xL).abs().item()
 
         # Norm estimate via Monte Carlo
-        psi = psi_with_BC(x)
-        norm = (L * torch.mean(psi**2)).item()
+        #psi = psi_with_BC(x)
+        #psi = psi_force_normalize(x)
+        #norm = (L * torch.mean(psi**2)).item()
 
     print("\n====== Physical report ======")
     print(f"E_const        = {E_const:.6f}")
     print(f"Residual RMS  = {r_rms:.3e}")
     print(f"|psi(0)|      = {psi0:.3e}")
     print(f"|psi(L)|      = {psiL:.3e}")
-    print(f"Norm          = {norm:.6f}")
+    print(f"Norm          = {norm_est:.6f}")
 
 #training loop
 if TRAIN:
     train()
     
 test_psi()          
-  
+
+
 # Plot learned wavefunction and probability density
 if PLOT:
     model.eval()
     with torch.no_grad():
         x_plot = torch.linspace(0.0, L, 400, device=device).view(-1, 1)
-        psi = psi_with_BC(x_plot).view(-1)
+        psi, _ = psi_force_normalize(x_plot)
+        psi = psi.view(-1)
         
         x_plot_np = x_plot.view(-1).cpu().numpy()
         psi_np = psi.cpu().numpy()
