@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 #======= SEED =======
-# SEED = 0    
-# torch.manual_seed(SEED)
-# torch.cuda.manual_seed_all(SEED)
+SEED = 0    
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
 
 
 '''
@@ -30,7 +30,7 @@ print(f"Using device: {device}")
 class MLP(nn.Module):
     #depth is number of hidden layers we self define input and output 1 neuron layers
     #setting width sets number of neurons per layer like the number of weights we can have per layer so that one input is going to 64 places in next line for input layer
-    def __init__(self, width=128, depth=4):
+    def __init__(self, width=512, depth=8):
         super().__init__()
         layers = [nn.Linear(1, width), nn.Tanh()] # defines input layer only taking 1 feature input right now
         # 2 hidden layers
@@ -155,20 +155,22 @@ def loss_fn(Nf=256, Nn=256, lam_bc=1.0, lam_norm=1.0): #nf is number of randomly
 
     #detach() doesnt save gradients for these losses we just want to monitor them not use them for backprop or anything that we need to store them with
     
-#==== Constants ======
+# ==== Constants ======
 L = 1.0  # Length of the well
-n = 3    # Quantum number
+n = 2    # Quantum number can do 1
 LAM_BC = 1.0  # Weight for boundary condition loss
-NUM_F = 512  # Number of collocation points for PDE loss
-NUM_N = 512  # Number of points for normalization loss
+NUM_F = 1600  # Number of collocation points for PDE loss
+NUM_N = 1600  # Number of points for normalization loss
 LAM_NORM = 1.5  # Weight for normalization loss
 LEARNING_RATE = 1e-3
-TRAINING_STEPS = 4000
+TRAINING_STEPS = 16000
 PLOT = True
 TRAIN = True
-#=====================
+LAYERS = 3
+WIDTH = 128
+# =====================
 
-model = MLP(width=64, depth=3).to(device) #assigns what device to use for it uses random initial weights i think
+model = MLP(width=WIDTH, depth=LAYERS).to(device) #assigns what device to use for it uses random initial weights i think
 E_const = ((n * math.pi) / L)**2 #analytical energy levels for infinite square well
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE) #Adam!!
 
@@ -255,4 +257,8 @@ if PLOT:
     axes[1].set_title("Probability density")
 
     plt.tight_layout()
-    plt.show()
+    
+    if device == "mps" or device == "cpu":
+        plt.show()
+    else:
+        plt.savefig("pinn_square_well.png", dpi=200, bbox_inches="tight")
