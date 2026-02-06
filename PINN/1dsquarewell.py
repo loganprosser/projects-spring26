@@ -182,7 +182,7 @@ def loss_fn(Nf=256, Nn=256, lam_bc=1.0, lam_norm=1.0): #nf is number of randomly
     
 # ==== Constants ======
 L = 1.0  # Length of the well
-n = 30    # Quantum number can do 1
+n = 10    # Quantum number can do 1
 LAM_BC = 1.0  # Weight for boundary condition loss
 NUM_F = 1600  # Number of collocation points for PDE loss
 NUM_N = 1600  # Number of points for normalization loss
@@ -191,10 +191,8 @@ LEARNING_RATE = 1e-3
 TRAINING_STEPS = 22000
 PLOT = True
 TRAIN = True
-#LAYERS = 3
-#WIDTH = 128
 LAYERS = 6
-WIDTH = 512
+WIDTH = 128
 # =====================
 
 model = MLP(width=WIDTH, depth=LAYERS).to(device) #assigns what device to use for it uses random initial weights i think
