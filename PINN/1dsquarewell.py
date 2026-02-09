@@ -22,8 +22,14 @@ as a loss function
 
 #for mac use mps for nvidia use cuda         
 print(f"PyTorch version: {torch.__version__}")
-device = "mps" if torch.backends.mps.is_available() else "cpu"
-device = "cuda" if torch.cuda.is_available() else device
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+    
 print(f"Using device: {device}")
 
 # Define a simple feedforward neural network or machinen learning perceptron (MLP)
@@ -182,12 +188,12 @@ def loss_fn(Nf=256, Nn=256, lam_bc=1.0, lam_norm=1.0): #nf is number of randomly
     
 # ==== Constants ======
 L = 1.0  # Length of the well
-n = 10    # Quantum number can do 1
+n = 25    # Quantum number can do 1
 LAM_BC = 1.0  # Weight for boundary condition loss
 NUM_F = 1600  # Number of collocation points for PDE loss
 NUM_N = 1600  # Number of points for normalization loss
 LAM_NORM = 1.5  # Weight for normalization loss
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-2    # if getting stuck in local minima try to raise learnring rate should idealy use some varying learnring rate
 TRAINING_STEPS = 22000
 PLOT = True
 TRAIN = True
