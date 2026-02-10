@@ -31,7 +31,7 @@ SIGNS = [-1, 1]
 particle_actual[0] = [0, 0]
 
 for i in range(1, EPOCHS):
-    num = rng.integers(1, 10)
+    num = rng.integers(1, 5)
     power = rng.uniform(1, 2)
     sign = rng.choice(SIGNS)
     move = DILUTION * sign * num**power
@@ -63,15 +63,28 @@ for i in range(1, EPOCHS):
     # Kalman gain
     K = uncertianty / (uncertianty + MEASUREMENT_NOISE)
     # Update estimate
-    particle_estimate[i] = particle_estimate[i-1] + K * (sensor_read - particle_estimate[i-1])
+    particle_estimate[i] = (i, particle_estimate[i-1][1] + K * (sensor_read - particle_estimate[i-1][1]))
     # Update uncertianty
     uncertianty = (1 - K) * uncertianty + PROCESS_NOISE
 
+# ===== Difference =====
+
+differences = np.zeros((EPOCHS,2), dtype=float)
+error = 0.0
+for i in range(EPOCHS):
+    differences[i][1] = abs(particle_actual[i][1] - particle_estimate[i][1])
+    differences[i][0] = i
+    error += differences[i][1]**2
+    print(f"Actual: {particle_actual[i][1]:.2f}, Estimate: {particle_estimate[i][1]:.2f}, Difference: {differences[i][1]:.2f}")
+    
+error = np.sqrt(error / EPOCHS)
+print(f"RMS error: {error:.2f}")
+    
 # === Plotting ===
 
 plt.figure()
 plt.plot(particle_actual[:, 0], particle_actual[:, 1], label="True trajectory")
-#plt.plot(r_est_hist[:, 0], r_est_hist[:, 1], label="Estimated trajectory")
+plt.plot(particle_estimate[:, 0], particle_estimate[:, 1], label="Estimated trajectory", color="orange")
 #plt.scatter(r_meas_hist[meas_mask, 0], r_meas_hist[meas_mask, 1], s=18, label="Measurements")
 plt.xlabel("x")
 plt.ylabel("y")
@@ -81,4 +94,4 @@ plt.grid(True)
 plt.show()
 
 
-print(particle_actual)
+#print(f"Actual particle path: {particle_actual} \n      Estimated particle path: {particle_estimate}")
