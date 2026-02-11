@@ -1,7 +1,10 @@
 """
 Particle tracker (alpha–beta filter) in 1D.
 
-#command + optioin + F to find and replace in file 
+#command + optioin + F to find and replace in file
+
+# numpy uses rng.normal(mean, stddev, size) to generate gaussian noise
+# need to pass sqrt(variance) as stddev to get correct noise level
 
 State estimate: position r_est and velocity v_est
 Prediction:
@@ -16,7 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # ====== Constants =======
-PROCESS_NOISE = 1.0
+PROCESS_NOISE = 1
 MEASUREMENT_NOISE = 2.0
 
 x = 1
@@ -33,7 +36,10 @@ SIGNS = [-1, 1]
 particle_actual[0] = [0, 0]
 
 for i in range(1, EPOCHS):
+    # random step with some nonlinearity and noise fits well for PROCESS_NOISE = 1.0
     step = DILUTION * rng.choice(SIGNS) * rng.integers(1, 5)**rng.uniform(1, 2)
+    # gaussian noise with variance equal to process noise
+    #step = DILUTION * rng.choice(SIGNS) * rng.integers(1, 5)**rng.normal(1.5,1.0)
     particle_actual[i] = [i, particle_actual[i-1, 1] + step]
     
     # num = rng.integers(1, 5)
@@ -53,26 +59,54 @@ update estimate: x_k+1^e = x_k+1^p + K_k+1 * (z_k+1 - x_k+1^p)
 update uncertianty: P_k+1 = (1 - K_k+1) * P_k+1
 """
 
-particle_estimate = np.zeros((EPOCHS, 2), dtype=float)
-initial_estimate = (0.0, 0.0)
-particle_estimate[0] = initial_estimate
-#initial uncertianty
-uncertianty = PROCESS_NOISE + MEASUREMENT_NOISE
+if 0 == 1:
+    particle_estimate = np.zeros((EPOCHS, 2), dtype=float)
+    initial_estimate = (0.0, 0.0)
+    particle_estimate[0] = initial_estimate
+    #initial uncertianty
+    uncertianty = PROCESS_NOISE + MEASUREMENT_NOISE
 
+    for i in range(1, EPOCHS):
+        sensor_read = rng.normal(0, np.sqrt(MEASUREMENT_NOISE))
+        
+        #prediction
+        _ , x_pred = particle_estimate[i-1]
+        uncertianty = uncertianty + PROCESS_NOISE
+        # Kalman gain
+        K = uncertianty / (uncertianty + MEASUREMENT_NOISE)
+        # Update estimate
+        particle_estimate[i] = (i, particle_estimate[i-1][1] + K * (sensor_read - particle_estimate[i-1][1]))
+        # Update uncertianty
+        uncertianty = (1 - K) * uncertianty + PROCESS_NOISE
+        
+
+# ===== Explicit Kalman Filter =====
+
+particle_kalman_estimate = np.zeros((EPOCHS, 2), dtype=float)
+initial_estimate = (0.0, 0.0)
+uncertianty = 0.0 # since initial state is exactly known we can start with 0 uncertianty but could also start with some initial uncertianty if we wanted to be more realistic
+particle_kalman_estimate[0] = initial_estimate
+
+# can defintely write to be way better space / memory but want to keep explicit representation of kalman math
 for i in range(1, EPOCHS):
-    sensor_read = rng.normal(0, np.sqrt(MEASUREMENT_NOISE))
+    # z_t = x_t + gaussian noise
+    sensor_read = particle_actual[i][1] + rng.normal(0, np.sqrt(MEASUREMENT_NOISE))
+    # liklihood P(z_k | x_k) = P(z_k - x_k)
+    likelihood = (sensor_read, MEASUREMENT_NOISE)
     
-    #prediction
-    _ , x_pred = particle_estimate[i-1]
-    uncertianty = uncertianty + PROCESS_NOISE
-    # Kalman gain
-    K = uncertianty / (uncertianty + MEASUREMENT_NOISE)
-    # Update estimate
-    particle_estimate[i] = (i, particle_estimate[i-1][1] + K * (sensor_read - particle_estimate[i-1][1]))
-    # Update uncertianty
-    uncertianty = (1 - K) * uncertianty + PROCESS_NOISE
+    # prior P(x_k | z_{1:k-1})
+    prior = (particle_kalman_estimate[i-1][1], uncertianty + PROCESS_NOISE) # need to add process noise Q here not sure why
     
+    # posterior P(x_k | z_{1:k}) ~ P(z_k | x_k) * P(x_k | z_{1:k-1})
+    # Posterior variance = (1/P_{k|k-1} + 1/R)^{-1}
+    variance = 1.0 / (1.0/prior[1] + 1.0/likelihood[1])
     
+    # posterior mean = (x^_{k|k-1}/P_{k|k-1} + z_k/R) * variance
+    mean = (prior[0]/prior[1] + likelihood[0]/likelihood[1]) * variance
+    
+    particle_kalman_estimate[i] = (i, mean)
+    # posterior goes to prior for next epoch
+    uncertianty = variance
 
 
 # ===== LS Path =====
@@ -110,10 +144,10 @@ for i in range(EPOCHS):
 differences = np.zeros((EPOCHS,2), dtype=float)
 error = 0.0
 for i in range(EPOCHS):
-    differences[i][1] = abs(particle_actual[i][1] - particle_estimate[i][1])
+    differences[i][1] = abs(particle_actual[i][1] - particle_kalman_estimate[i][1])
     differences[i][0] = i
     error += differences[i][1]**2
-    print(f"Actual: {particle_actual[i][1]:.2f}, Estimate: {particle_estimate[i][1]:.2f}, LS Estimate: {particle_ls_estimate[i][1]:.2f}, KalmanDiff: {differences[i][1]:.2f}")
+    print(f"Actual: {particle_actual[i][1]:.2f}, Estimate: {particle_kalman_estimate[i][1]:.2f}, LS Estimate: {particle_ls_estimate[i][1]:.2f}, KalmanDiff: {differences[i][1]:.2f}")
     
 error = np.sqrt(error / EPOCHS)
 print(f"RMS error: {error:.2f}")
@@ -122,12 +156,12 @@ print(f"RMS error: {error:.2f}")
 
 plt.figure()
 plt.plot(particle_actual[:, 0], particle_actual[:, 1], label="True trajectory")
-plt.plot(particle_estimate[:, 0], particle_estimate[:, 1], label="Estimated trajectory", color="orange")
-plt.plot(particle_ls_estimate[:, 0], particle_ls_estimate[:, 1], label="LS Estimate", color="red")
+plt.plot(particle_kalman_estimate[:, 0], particle_kalman_estimate[:, 1], label="Kalman Estimate", color="red")
+plt.plot(particle_ls_estimate[:, 0], particle_ls_estimate[:, 1], label="LS Estimate", color="purple")
 #plt.scatter(r_meas_hist[meas_mask, 0], r_meas_hist[meas_mask, 1], s=18, label="Measurements")
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("1D Tracking: Truth vs Kalman vs LS")
+plt.title(f"1D Tracking: Truth vs Kalman vs LS [RMS error: {error:.2f}]")
 plt.legend()
 plt.grid(True)
 plt.show()
