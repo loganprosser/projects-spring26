@@ -1,7 +1,7 @@
 """
-Missile tracker (alpha–beta filter) in 1D.
+Particle tracker (alpha–beta filter) in 1D.
 
-command + optioin + F to find and replace in file 
+#command + optioin + F to find and replace in file 
 
 State estimate: position r_est and velocity v_est
 Prediction:
@@ -33,12 +33,15 @@ SIGNS = [-1, 1]
 particle_actual[0] = [0, 0]
 
 for i in range(1, EPOCHS):
-    num = rng.integers(1, 5)
-    power = rng.uniform(1, 2)
-    sign = rng.choice(SIGNS)
-    move = DILUTION * sign * num**power
-    #particle_actual[i-1, 1] if i > 0 else 1
-    particle_actual[i] = [i, move]
+    step = DILUTION * rng.choice(SIGNS) * rng.integers(1, 5)**rng.uniform(1, 2)
+    particle_actual[i] = [i, particle_actual[i-1, 1] + step]
+    
+    # num = rng.integers(1, 5)
+    # power = rng.uniform(1, 2)
+    # sign = rng.choice(SIGNS)
+    # move = DILUTION * sign * num**power
+    # #particle_actual[i-1, 1] if i > 0 else 1
+    # particle_actual[i] = [i, move]
 
 # ==== Kalman Filter ====
 """
@@ -56,7 +59,6 @@ particle_estimate[0] = initial_estimate
 #initial uncertianty
 uncertianty = PROCESS_NOISE + MEASUREMENT_NOISE
 
-
 for i in range(1, EPOCHS):
     sensor_read = rng.normal(0, np.sqrt(MEASUREMENT_NOISE))
     
@@ -69,6 +71,9 @@ for i in range(1, EPOCHS):
     particle_estimate[i] = (i, particle_estimate[i-1][1] + K * (sensor_read - particle_estimate[i-1][1]))
     # Update uncertianty
     uncertianty = (1 - K) * uncertianty + PROCESS_NOISE
+    
+    
+
 
 # ===== LS Path =====
 """
@@ -98,7 +103,6 @@ for i in range(EPOCHS):
         intercept = particle_actual[i][1] if i < EPOCHS else 0
 
     particle_ls_estimate[i] = [i, slope * i + intercept]
-
 
 
 # ===== Difference =====
