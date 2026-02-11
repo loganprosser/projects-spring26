@@ -36,7 +36,9 @@ SIGNS = [-1, 1]
 particle_actual[0] = [0, 0]
 
 for i in range(1, EPOCHS):
+    # random step with some nonlinearity and noise fits well for PROCESS_NOISE = 1.0
     step = DILUTION * rng.choice(SIGNS) * rng.integers(1, 5)**rng.uniform(1, 2)
+    # gaussian noise with variance equal to process noise
     #step = DILUTION * rng.choice(SIGNS) * rng.integers(1, 5)**rng.normal(1.5,1.0)
     particle_actual[i] = [i, particle_actual[i-1, 1] + step]
     
@@ -159,7 +161,7 @@ plt.plot(particle_ls_estimate[:, 0], particle_ls_estimate[:, 1], label="LS Estim
 #plt.scatter(r_meas_hist[meas_mask, 0], r_meas_hist[meas_mask, 1], s=18, label="Measurements")
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("1D Tracking: Truth vs Kalman vs LS")
+plt.title(f"1D Tracking: Truth vs Kalman vs LS [RMS error: {error:.2f}]")
 plt.legend()
 plt.grid(True)
 plt.show()
